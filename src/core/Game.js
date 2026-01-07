@@ -1,33 +1,106 @@
 import Renderer from './Renderer.js';
 import GameObject from './GameObject.js';
-import Camera from './Camera.js';
+import CameraComponent from './CameraComponent.js'; // Import the new CameraComponent
 import InputManager from './InputManager.js';
+import TransformComponent from './TransformComponent.js';
+import MeshRendererComponent from './MeshRendererComponent.js';
 import { create as vec3_create, add as vec3_add, scale as vec3_scale } from '../math/vec3.js';
-import { perspective } from '../math/mat4.js'; // Added perspective import
+import { perspective } from '../math/mat4.js';
+
+// Define common cube vertex data here for now, could be moved to a Mesh utility later
+const CUBE_VERTICES = new Float32Array([
+    // Front face
+    -0.5, -0.5, 0.5,  0.0,  0.0,  1.0,  0.0, 1.0,
+     0.5, -0.5, 0.5,  0.0,  0.0,  1.0,  1.0, 1.0,
+     0.5,  0.5, 0.5,  0.0,  0.0,  1.0,  1.0, 0.0,
+    -0.5, -0.5, 0.5,  0.0,  0.0,  1.0,  0.0, 1.0,
+     0.5,  0.5, 0.5,  0.0,  0.0,  1.0,  1.0, 0.0,
+    -0.5,  0.5, 0.5,  0.0,  0.0,  1.0,  0.0, 0.0,
+
+    // Back face
+    -0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 1.0,
+     0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 1.0,
+     0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 0.0,
+    -0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 1.0,
+     0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 0.0,
+    -0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 0.0,
+
+    // Top face
+    -0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  0.0, 1.0,
+     0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  1.0, 1.0,
+     0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  1.0, 0.0,
+    -0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  0.0, 1.0,
+     0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  1.0, 0.0,
+    -0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  0.0, 0.0,
+
+    // Bottom face
+    -0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  0.0, 1.0,
+     0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  1.0, 1.0,
+     0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  1.0, 0.0,
+    -0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  0.0, 1.0,
+     0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  1.0, 0.0,
+    -0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  0.0, 0.0,
+
+    // Right face
+     0.5, -0.5, -0.5,  1.0,  0.0,  0.0,  0.0, 1.0,
+     0.5,  0.5, -0.5,  1.0,  0.0,  0.0,  1.0, 1.0,
+     0.5,  0.5,  0.5,  1.0,  0.0,  0.0,  1.0, 0.0,
+     0.5, -0.5, -0.5,  1.0,  0.0,  0.0,  0.0, 1.0,
+     0.5,  0.5,  0.5,  1.0,  0.0,  0.0,  1.0, 0.0,
+     0.5, -0.5,  0.5,  1.0,  0.0,  0.0,  0.0, 0.0,
+
+    // Left face
+    -0.5, -0.5, -0.5, -1.0,  0.0,  0.0,  0.0, 1.0,
+    -0.5,  0.5, -0.5, -1.0,  0.0,  0.0,  1.0, 1.0,
+    -0.5,  0.5,  0.5, -1.0,  0.0,  0.0,  1.0, 0.0,
+    -0.5, -0.5, -0.5, -1.0,  0.0,  0.0,  0.0, 1.0,
+    -0.5,  0.5,  0.5, -1.0,  0.0,  0.0,  1.0, 0.0,
+    -0.5, -0.5,  0.5, -1.0,  0.0,  0.0,  0.0, 0.0,
+]);
 
 export default class Game {
     constructor() {
         this.renderer = new Renderer();
         this.inputManager = new InputManager();
-        this.camera = null;
+        this.cameraGameObject = null; // Renamed to clearly indicate it's a GameObject
         this.scene = [];
         this.lastTime = 0;
     }
 
     async init() {
         console.log("Game.init() started.");
-        await this.renderer.init(); // No callback passed here
+        await this.renderer.init();
         console.log("Game.init(): Renderer initialized.");
         
-        this.camera = new Camera(this.renderer.canvas);
-        console.log("Game.init(): Camera created.");
+        // Create camera GameObject and add CameraComponent
+        this.cameraGameObject = new GameObject("MainCamera");
+        this.cameraGameObject.addComponent(new CameraComponent(this.cameraGameObject, this.renderer.canvas));
+        console.log("Game.init(): Camera GameObject created with CameraComponent.");
 
-        const obj1 = new GameObject([-1.0, 0.0, 0.0], [1, 0, 0]);
-        const obj2 = new GameObject([1.0, 0.0, 0.0], [0, 1, 0]);
-        const obj3 = new GameObject([0.0, 0.0, -1.0], [0, 0, 1]);
+        // Create game objects with components
+        const obj1 = new GameObject("Cube1");
+        const transform1 = obj1.getComponent(TransformComponent);
+        transform1.setPosition(-1.0, 0.0, 0.0);
+        obj1.addComponent(new MeshRendererComponent(obj1, CUBE_VERTICES, [1, 0, 0, 1]));
+
+        const obj2 = new GameObject("Cube2");
+        const transform2 = obj2.getComponent(TransformComponent);
+        transform2.setPosition(1.0, 0.0, 0.0);
+        obj2.addComponent(new MeshRendererComponent(obj2, CUBE_VERTICES, [0, 1, 0, 1]));
+
+        const obj3 = new GameObject("Cube3");
+        const transform3 = obj3.getComponent(TransformComponent);
+        transform3.setPosition(0.0, 0.0, -1.0);
+        obj3.addComponent(new MeshRendererComponent(obj3, CUBE_VERTICES, [0, 0, 1, 1]));
 
         this.scene.push(obj1, obj2, obj3);
-        console.log("Game.init(): GameObjects created and added to scene.");
+        console.log("Game.init(): GameObjects created with components and added to scene.");
+
+        // Call start on all game objects and their components
+        this.cameraGameObject.start(); // Start camera GameObject
+        for (const obj of this.scene) {
+            obj.start();
+        }
 
         // Initial call to recreate bind groups after renderer init and scene population
         this.recreateBindGroups(this.renderer.device, this.renderer.pipeline);
@@ -35,17 +108,23 @@ export default class Game {
     }
 
     recreateBindGroups(device, pipeline) {
-        if (!this.camera.uniformBuffer) { // Only create buffers once for camera
-            this.camera.createBuffers(device, pipeline);
-        } else { // Recreate bind group if buffers already exist
-            this.camera.recreateBindGroup(pipeline);
+        const cameraComponent = this.cameraGameObject.getComponent(CameraComponent);
+        if (cameraComponent) {
+            if (!cameraComponent.uniformBuffer) {
+                cameraComponent.createBuffers(device, pipeline);
+            } else {
+                cameraComponent.recreateBindGroup(pipeline);
+            }
         }
         
         for(const obj of this.scene) {
-            if (!obj.vertexBuffer) { // Only create buffers once for game objects
-                obj.createBuffers(device, pipeline);
-            } else { // Recreate bind group if buffers already exist
-                obj.recreateBindGroup(pipeline);
+            const meshRenderer = obj.getComponent(MeshRendererComponent);
+            if (meshRenderer) {
+                if (!meshRenderer.vertexBuffer) {
+                    meshRenderer.createBuffers(device, pipeline);
+                } else {
+                    meshRenderer.recreateBindGroup(pipeline);
+                }
             }
         }
         console.log("Game: All bind groups recreated.");
@@ -56,9 +135,12 @@ export default class Game {
         const height = window.innerHeight;
         this.renderer.resize(width, height);
 
-        // Update camera aspect ratio
-        const aspectRatio = width / height;
-        perspective(this.camera.projectionMatrix, this.camera.fovY, aspectRatio, this.camera.zNear, this.camera.zFar);
+        const cameraComponent = this.cameraGameObject.getComponent(CameraComponent);
+        if (cameraComponent) {
+            // Update camera aspect ratio
+            const aspectRatio = width / height;
+            perspective(cameraComponent.projectionMatrix, cameraComponent.fovY, aspectRatio, cameraComponent.zNear, cameraComponent.zFar);
+        }
 
         // Recreate bind groups with the new pipeline from the resized renderer
         this.recreateBindGroups(this.renderer.device, this.renderer.pipeline);
@@ -75,59 +157,75 @@ export default class Game {
         this.lastTime = now;
 
         this.update(deltaTime, now);
-        this.renderer.render(this.camera, this.scene);
-
+        this.renderer.render(this.cameraGameObject, this.scene); // Pass camera GameObject
+        
         requestAnimationFrame(() => this.gameLoop());
     }
 
     update(deltaTime, now) {
+        const cameraComponent = this.cameraGameObject.getComponent(CameraComponent);
+        if (!cameraComponent) return;
+
         // Handle input to move camera
-        const cameraSpeed = 2.0 * deltaTime; // Increased speed for better movement
+        const cameraSpeed = 2.0 * deltaTime;
         const tempVec3 = vec3_create();
 
         if (this.inputManager.isKeyDown('KeyW')) { // Move forward
-            vec3_scale(tempVec3, this.camera.forward, cameraSpeed);
-            vec3_add(this.camera.position, this.camera.position, tempVec3);
+            vec3_scale(tempVec3, cameraComponent.forward, cameraSpeed);
+            vec3_add(cameraComponent.position, cameraComponent.position, tempVec3);
         }
         if (this.inputManager.isKeyDown('KeyS')) { // Move backward
-            vec3_scale(tempVec3, this.camera.forward, -cameraSpeed);
-            vec3_add(this.camera.position, this.camera.position, tempVec3);
+            vec3_scale(tempVec3, cameraComponent.forward, -cameraSpeed);
+            vec3_add(cameraComponent.position, cameraComponent.position, tempVec3);
         }
         if (this.inputManager.isKeyDown('KeyA')) { // Strafe left
-            vec3_scale(tempVec3, this.camera.right, -cameraSpeed);
-            vec3_add(this.camera.position, this.camera.position, tempVec3);
+            vec3_scale(tempVec3, cameraComponent.right, -cameraSpeed);
+            vec3_add(cameraComponent.position, cameraComponent.position, tempVec3);
         }
         if (this.inputManager.isKeyDown('KeyD')) { // Strafe right
-            vec3_scale(tempVec3, this.camera.right, cameraSpeed);
-            vec3_add(this.camera.position, this.camera.position, tempVec3);
+            vec3_scale(tempVec3, cameraComponent.right, cameraSpeed);
+            vec3_add(cameraComponent.position, cameraComponent.position, tempVec3);
         }
         // Add Q and E for up/down movement
         if (this.inputManager.isKeyDown('KeyQ')) { // Move up
-            this.camera.position[1] += cameraSpeed; // Use global Y for up/down for now
+            cameraComponent.position[1] += cameraSpeed;
         }
         if (this.inputManager.isKeyDown('KeyE')) { // Move down
-            this.camera.position[1] -= cameraSpeed; // Use global Y for up/down for now
+            cameraComponent.position[1] -= cameraSpeed;
         }
 
         // Handle mouse input for camera rotation
         const mouseDelta = this.inputManager.getMouseDelta();
-        this.camera.yaw += mouseDelta[0];
-        this.camera.pitch -= mouseDelta[1]; // Invert Y for intuitive mouse movement
+        cameraComponent.yaw += mouseDelta[0];
+        cameraComponent.pitch -= mouseDelta[1];
 
         // Clamp pitch to prevent camera flip
-        const halfPI = Math.PI / 2 - 0.01; // Small epsilon to avoid issues at exactly PI/2
-        if (this.camera.pitch > halfPI) this.camera.pitch = halfPI;
-        if (this.camera.pitch < -halfPI) this.camera.pitch = -halfPI;
+        const halfPI = Math.PI / 2 - 0.01;
+        if (cameraComponent.pitch > halfPI) cameraComponent.pitch = halfPI;
+        if (cameraComponent.pitch < -halfPI) cameraComponent.pitch = -halfPI;
 
-        this.camera.updateViewProjMatrix();
-
-        // Animate objects
-        this.scene[0].rotationY = now / 1000; // Animate Y rotation
-        this.scene[1].rotationX = now / 700; // Animate X rotation
-        this.scene[2].rotationZ = now / 1200; // Animate Z rotation
-
+        // Call update on all game objects and their components, including the camera
+        this.cameraGameObject.update(deltaTime);
         for (const obj of this.scene) {
-            obj.updateModelMatrix();
+            obj.update(deltaTime);
+        }
+
+        // Animate objects using TransformComponent
+        const timeFactor = now / 1000;
+        
+        const obj1Transform = this.scene[0].getComponent(TransformComponent);
+        if (obj1Transform) {
+            obj1Transform.setRotation(obj1Transform.rotation[0], timeFactor, obj1Transform.rotation[2]);
+        }
+
+        const obj2Transform = this.scene[1].getComponent(TransformComponent);
+        if (obj2Transform) {
+            obj2Transform.setRotation(timeFactor / 0.7, obj2Transform.rotation[1], obj2Transform.rotation[2]);
+        }
+
+        const obj3Transform = this.scene[2].getComponent(TransformComponent);
+        if (obj3Transform) {
+            obj3Transform.setRotation(obj3Transform.rotation[0], obj3Transform.rotation[1], timeFactor / 1.2);
         }
     }
 }

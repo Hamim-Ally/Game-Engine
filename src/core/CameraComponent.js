@@ -1,13 +1,17 @@
+import Component from './Component.js';
 import { create, perspective, lookAt, multiply } from '../math/mat4.js';
 import { create as vec3_create, normalize as vec3_normalize, add as vec3_add, subtract as vec3_subtract, scale as vec3_scale, cross as vec3_cross, set as vec3_set } from '../math/vec3.js';
 
-export default class Camera {
-    constructor(canvas) {
+export default class CameraComponent extends Component {
+    constructor(gameObject, canvas) {
+        super(gameObject);
+        this.canvas = canvas; // Keep a reference to the canvas for aspect ratio
+
         this.projectionMatrix = create();
         this.fovY = Math.PI / 4; // 45 degrees in radians
         this.zNear = 0.1;
         this.zFar = 100;
-        const aspectRatio = canvas.width / canvas.height;
+        const aspectRatio = this.canvas.width / this.canvas.height;
         perspective(this.projectionMatrix, this.fovY, aspectRatio, this.zNear, this.zFar);
 
         this.viewMatrix = create();
@@ -32,6 +36,7 @@ export default class Camera {
 
         this.uniformBuffer = null;
         this.bindGroup = null;
+        this.device = null; // Stored for bind group recreation
     }
 
     createBuffers(device, pipeline) {
@@ -42,7 +47,7 @@ export default class Camera {
         // light_position (vec3 padded to vec4) + light_color (vec3 padded to vec4) +
         // ambient_light_color (vec3 padded to vec4) + specular_color (vec3 padded to vec4) +
         // shininess (f32 padded to vec4)
-        // 16*4 bytes (mat4) + 6 * 4*4 bytes (for each vec3 padded to vec4, and f32 padded to vec4) = 64 + 6*16 = 64 + 96 = 160 bytes
+        // 16*4 bytes (mat4) + 6 * 4*4 bytes (for each vec3 padded to vec4, and f32 padded to vec4) = 64 + 6*16 = 160 bytes
         this.uniformBuffer = device.createBuffer({
             size: 16 * 4 + 6 * 4 * 4, // 160 bytes
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -53,7 +58,7 @@ export default class Camera {
 
     recreateBindGroup(pipeline) {
         if (!this.device || !pipeline) {
-            console.error("Camera: Cannot recreate bind group. Device or pipeline is missing.");
+            console.error("CameraComponent: Cannot recreate bind group. Device or pipeline is missing.");
             return;
         }
         this.bindGroup = this.device.createBindGroup({
@@ -82,5 +87,10 @@ export default class Camera {
         multiply(this.viewProjMatrix, this.projectionMatrix, this.viewMatrix);
 
         // Data for uniform buffer is now prepared in Renderer.js
+    }
+
+    // This method will be called by GameObject.update()
+    update(deltaTime) {
+        this.updateViewProjMatrix();
     }
 }

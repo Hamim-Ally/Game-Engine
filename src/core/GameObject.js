@@ -1,109 +1,92 @@
-import { create, identity, translate, scale as mScale, rotateX, rotateY, rotateZ } from '../math/mat4.js';
+import Component from './Component.js';
+import TransformComponent from './TransformComponent.js';
 
 export default class GameObject {
-    constructor(position = [0, 0, 0], color = [1, 1, 1]) {
-        this.vertices = new Float32Array([
-            // Front face
-            -0.5, -0.5, 0.5,  0.0,  0.0,  1.0,  0.0, 1.0,
-             0.5, -0.5, 0.5,  0.0,  0.0,  1.0,  1.0, 1.0,
-             0.5,  0.5, 0.5,  0.0,  0.0,  1.0,  1.0, 0.0,
-            -0.5, -0.5, 0.5,  0.0,  0.0,  1.0,  0.0, 1.0,
-             0.5,  0.5, 0.5,  0.0,  0.0,  1.0,  1.0, 0.0,
-            -0.5,  0.5, 0.5,  0.0,  0.0,  1.0,  0.0, 0.0,
+    constructor(name = "GameObject") {
+        this.name = name;
+        this.components = new Map(); // Store components by their class name or a unique key
+        this.children = []; // For scene graph hierarchy later
+        this.parent = null;
 
-            // Back face
-            -0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 1.0,
-             0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 1.0,
-             0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 0.0,
-            -0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 1.0,
-             0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 0.0,
-            -0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 0.0,
-
-            // Top face
-            -0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  0.0, 1.0,
-             0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  1.0, 1.0,
-             0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  1.0, 0.0,
-            -0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  0.0, 1.0,
-             0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  1.0, 0.0,
-            -0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  0.0, 0.0,
-
-            // Bottom face
-            -0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  0.0, 1.0,
-             0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  1.0, 1.0,
-             0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  1.0, 0.0,
-            -0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  0.0, 1.0,
-             0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  1.0, 0.0,
-            -0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  0.0, 0.0,
-
-            // Right face
-             0.5, -0.5, -0.5,  1.0,  0.0,  0.0,  0.0, 1.0,
-             0.5,  0.5, -0.5,  1.0,  0.0,  0.0,  1.0, 1.0,
-             0.5,  0.5,  0.5,  1.0,  0.0,  0.0,  1.0, 0.0,
-             0.5, -0.5, -0.5,  1.0,  0.0,  0.0,  0.0, 1.0,
-             0.5,  0.5,  0.5,  1.0,  0.0,  0.0,  1.0, 0.0,
-             0.5, -0.5,  0.5,  1.0,  0.0,  0.0,  0.0, 0.0,
-
-            // Left face
-            -0.5, -0.5, -0.5, -1.0,  0.0,  0.0,  0.0, 1.0,
-            -0.5,  0.5, -0.5, -1.0,  0.0,  0.0,  1.0, 1.0,
-            -0.5,  0.5,  0.5, -1.0,  0.0,  0.0,  1.0, 0.0,
-            -0.5, -0.5, -0.5, -1.0,  0.0,  0.0,  0.0, 1.0,
-            -0.5,  0.5,  0.5, -1.0,  0.0,  0.0,  1.0, 0.0,
-            -0.5, -0.5,  0.5, -1.0,  0.0,  0.0,  0.0, 0.0,
-        ]);
-
-        this.position = position;
-        this.rotationX = 0; // X-axis rotation in radians
-        this.rotationY = 0; // Y-axis rotation in radians
-        this.rotationZ = 0; // Z-axis rotation in radians
-        this.scale = [1, 1, 1];
-        this.color = new Float32Array([...color, 1.0]);
-        
-        this.modelMatrix = create();
-        this.updateModelMatrix();
-
-        this.vertexBuffer = null;
-        this.uniformBuffer = null;
-        this.bindGroup = null;
+        // Every GameObject should have a TransformComponent
+        this.addComponent(new TransformComponent(this));
     }
 
-    createBuffers(device, pipeline) {
-        // Store device for later bindGroup recreation if needed
-        this.device = device;
-
-        this.vertexBuffer = device.createBuffer({
-            size: this.vertices.byteLength,
-            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: true,
-        });
-        new Float32Array(this.vertexBuffer.getMappedRange()).set(this.vertices);
-        this.vertexBuffer.unmap();
-
-        this.uniformBuffer = device.createBuffer({
-            size: 16 * 4 + 4 * 4,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
-
-        this.recreateBindGroup(pipeline); // Call the new method
-    }
-
-    recreateBindGroup(pipeline) {
-        if (!this.device || !pipeline) {
-            console.error("GameObject: Cannot recreate bind group. Device or pipeline is missing.");
-            return;
+    /**
+     * Adds a component to this GameObject.
+     * @param {Component} component The component instance to add.
+     * @returns {Component} The added component.
+     */
+    addComponent(component) {
+        if (!(component instanceof Component)) {
+            console.error("Attempted to add non-Component object to GameObject:", component);
+            return null;
         }
-        this.bindGroup = this.device.createBindGroup({
-            layout: pipeline.getBindGroupLayout(1),
-            entries: [{ binding: 0, resource: { buffer: this.uniformBuffer } }],
-        });
+        const componentName = component.constructor.name;
+        if (this.components.has(componentName)) {
+            console.warn(`GameObject '${this.name}' already has a component of type '${componentName}'.`);
+            return this.components.get(componentName);
+        }
+        this.components.set(componentName, component);
+        return component;
     }
 
-    updateModelMatrix() {
-        identity(this.modelMatrix); // Start with identity
-        translate(this.modelMatrix, this.modelMatrix, this.position); // Apply translation
-        rotateY(this.modelMatrix, this.modelMatrix, this.rotationY); // Apply Y-rotation
-        rotateX(this.modelMatrix, this.modelMatrix, this.rotationX); // Apply X-rotation
-        rotateZ(this.modelMatrix, this.modelMatrix, this.rotationZ); // Apply Z-rotation
-        mScale(this.modelMatrix, this.modelMatrix, this.scale);     // Apply scale
+    /**
+     * Retrieves a component of a specific type from this GameObject.
+     * @param {Function} ComponentType The class constructor of the component to retrieve (e.g., TransformComponent).
+     * @returns {Component | undefined} The component instance, or undefined if not found.
+     */
+    getComponent(ComponentType) {
+        if (typeof ComponentType !== 'function' || !ComponentType.name) {
+            console.error("getComponent expects a Component class constructor.");
+            return undefined;
+        }
+        return this.components.get(ComponentType.name);
+    }
+
+    /**
+     * Removes a component of a specific type from this GameObject.
+     * @param {Function} ComponentType The class constructor of the component to remove.
+     * @returns {boolean} True if the component was removed, false otherwise.
+     */
+    removeComponent(ComponentType) {
+        if (typeof ComponentType !== 'function' || !ComponentType.name) {
+            console.error("removeComponent expects a Component class constructor.");
+            return false;
+        }
+        const componentName = ComponentType.name;
+        if (this.components.has(componentName)) {
+            const component = this.components.get(componentName);
+            if (component.onDestroy) {
+                component.onDestroy();
+            }
+            this.components.delete(componentName);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Calls the start method on all attached components.
+     * This should typically be called once after a GameObject is created and added to a scene.
+     */
+    start() {
+        for (const component of this.components.values()) {
+            if (component.start) {
+                component.start();
+            }
+        }
+    }
+
+    /**
+     * Calls the update method on all attached components.
+     * @param {number} deltaTime The time elapsed since the last frame.
+     */
+    update(deltaTime) {
+        for (const component of this.components.values()) {
+            if (component.update) {
+                component.update(deltaTime);
+            }
+        }
     }
 }

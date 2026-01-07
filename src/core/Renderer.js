@@ -1,3 +1,7 @@
+import TransformComponent from './TransformComponent.js';
+import MeshRendererComponent from './MeshRendererComponent.js';
+import CameraComponent from './CameraComponent.js'; // Import CameraComponent
+
 export default class Renderer {
     constructor() {
         this.adapter = null;
@@ -206,22 +210,24 @@ export default class Renderer {
         console.log("Renderer: Texture bind group created.");
     }
 
-    render(camera, scene) {
-        if (!camera || !scene || scene.length === 0) {
-            console.warn("Renderer: No camera or scene objects to render.");
+    render(cameraGameObject, scene) { // Changed camera to cameraGameObject
+        const cameraComponent = cameraGameObject.getComponent(CameraComponent);
+        if (!cameraComponent || !scene || scene.length === 0) {
+            console.warn("Renderer: No camera component or scene objects to render.");
             return;
         }
+
         // Prepare scene uniform buffer data
         const sceneUniformBufferData = new Float32Array(40);
-        sceneUniformBufferData.set(camera.viewProjMatrix, 0);
-        sceneUniformBufferData.set(camera.position, 16);
-        sceneUniformBufferData.set(camera.lightPosition, 20);
-        sceneUniformBufferData.set(camera.lightColor, 24);
-        sceneUniformBufferData.set(camera.ambientLightColor, 28);
-        sceneUniformBufferData.set(camera.specularColor, 32);
-        sceneUniformBufferData[36] = camera.shininess;
+        sceneUniformBufferData.set(cameraComponent.viewProjMatrix, 0);
+        sceneUniformBufferData.set(cameraComponent.position, 16);
+        sceneUniformBufferData.set(cameraComponent.lightPosition, 20);
+        sceneUniformBufferData.set(cameraComponent.lightColor, 24);
+        sceneUniformBufferData.set(cameraComponent.ambientLightColor, 28);
+        sceneUniformBufferData.set(cameraComponent.specularColor, 32);
+        sceneUniformBufferData[36] = cameraComponent.shininess;
 
-        this.device.queue.writeBuffer(camera.uniformBuffer, 0, sceneUniformBufferData);
+        this.device.queue.writeBuffer(cameraComponent.uniformBuffer, 0, sceneUniformBufferData);
         const commandEncoder = this.device.createCommandEncoder();
         const textureView = this.context.getCurrentTexture().createView();
         const renderPassDescriptor = {
@@ -242,19 +248,19 @@ export default class Renderer {
         };
         const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
         passEncoder.setPipeline(this.pipeline);
-        passEncoder.setBindGroup(0, camera.bindGroup);
+        passEncoder.setBindGroup(0, cameraComponent.bindGroup); // Use cameraComponent.bindGroup
         passEncoder.setBindGroup(2, this.textureBindGroup);
 
         for (const gameObject of scene) {
-            if (gameObject.vertexBuffer && gameObject.uniformBuffer && gameObject.bindGroup) {
-                this.device.queue.writeBuffer(gameObject.uniformBuffer, 0, gameObject.modelMatrix);
-                this.device.queue.writeBuffer(gameObject.uniformBuffer, 16 * 4, gameObject.color);
-                passEncoder.setBindGroup(1, gameObject.bindGroup);
-                passEncoder.setVertexBuffer(0, gameObject.vertexBuffer);
-                passEncoder.draw(gameObject.vertices.length / 8, 1, 0, 0);
-                console.log(`Renderer: Drawing GameObject with ${gameObject.vertices.length / 8} vertices.`);
+            const meshRenderer = gameObject.getComponent(MeshRendererComponent);
+            if (meshRenderer && meshRenderer.vertexBuffer && meshRenderer.uniformBuffer && meshRenderer.bindGroup) {
+                meshRenderer.updateUniformBuffer(); // Update uniform buffer with model matrix and color
+                passEncoder.setBindGroup(1, meshRenderer.bindGroup);
+                passEncoder.setVertexBuffer(0, meshRenderer.vertexBuffer);
+                passEncoder.draw(meshRenderer.vertices.length / 8, 1, 0, 0);
+                console.log(`Renderer: Drawing GameObject "${gameObject.name}" with ${meshRenderer.vertices.length / 8} vertices.`);
             } else {
-                console.warn("Renderer: Skipping GameObject due to missing buffers/bindGroup.", gameObject);
+                console.warn(`Renderer: Skipping GameObject "${gameObject.name}" due to missing MeshRendererComponent or its buffers/bindGroup.`);
             }
         }
         passEncoder.end();
